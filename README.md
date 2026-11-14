@@ -95,9 +95,9 @@ Apple no permite instalar apps desde un archivo descargado: un `.ipa` solo se in
 App Store o TestFlight, y ambos requieren una cuenta de Apple Developer (USD 99 por año).
 Por eso el lanzamiento para iPhone es la versión web instalable:
 
-- El flujo `.github/workflows/web-pages.yml` publica la app en GitHub Pages cada vez que hay
-  cambios en `main`. Hay que activarlo una sola vez en
-  *Settings → Pages → Source: GitHub Actions*.
+- El flujo `.github/workflows/web-pages.yml` compila la app y la publica en la rama `gh-pages`
+  cada vez que hay cambios. Si el sitio no aparece solo, activalo una vez en
+  *Settings → Pages → Source: Deploy from a branch → `gh-pages`*.
 - Queda en `https://<usuario>.github.io/<repositorio>/`. En el iPhone: abrirla en **Safari** →
   Compartir → *Agregar a inicio*. Funciona sin conexión y guarda los datos en el teléfono.
 - Para sincronizar con otros dispositivos, en *Ajustes → Servidor* se escribe la dirección
