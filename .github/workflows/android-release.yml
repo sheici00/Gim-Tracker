@@ -1,0 +1,88 @@
+name: APK de Android
+
+# Compila la APK y la publica como release.
+#  - Al subir un tag vX.Y.Z  -> release con ese número de versión.
+#  - A mano (Actions > APK de Android > Run workflow) -> release "build-N".
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    env:
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Versión
+        id: ver
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            echo "tag=$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
+            echo "name=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=build-$GITHUB_RUN_NUMBER" >> "$GITHUB_OUTPUT"
+            echo "name=1.0.$GITHUB_RUN_NUMBER" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Compilar la app web
+        run: |
+          npm ci
+          npm test
+          npm run build
+          npx cap sync android
+
+      - name: Preparar la firma
+        id: sign
+        run: |
+          if [ -n "$ANDROID_KEYSTORE_BASE64" ]; then
+            echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+            echo "ANDROID_KEYSTORE_FILE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+            echo "task=assembleRelease" >> "$GITHUB_OUTPUT"
+            echo "apk=android/app/build/outputs/apk/release/app-release.apk" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::Sin keystore en los secrets: se genera una APK de depuración. Cada compilación queda firmada distinto y no actualiza sobre la anterior."
+            echo "task=assembleDebug" >> "$GITHUB_OUTPUT"
+            echo "apk=android/app/build/outputs/apk/debug/app-debug.apk" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Compilar la APK
+        working-directory: android
+        env:
+          APP_VERSION_CODE: ${{ github.run_number }}
+          APP_VERSION_NAME: ${{ steps.ver.outputs.name }}
+        run: ./gradlew ${{ steps.sign.outputs.task }} --no-daemon
+
+      - name: Renombrar
+        run: cp "${{ steps.sign.outputs.apk }}" "gym-tracker-${{ steps.ver.outputs.name }}.apk"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gym-tracker-apk
+          path: gym-tracker-*.apk
+
+      - name: Publicar release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ steps.ver.outputs.tag }}" "gym-tracker-${{ steps.ver.outputs.name }}.apk" \
+            --title "Gym Tracker ${{ steps.ver.outputs.name }}" \
+            --notes "Descargá el archivo .apk desde el celular Android y abrilo para instalar." \
+            --target "$GITHUB_SHA"
