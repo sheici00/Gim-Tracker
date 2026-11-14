@@ -2,10 +2,13 @@ name: APK de Android
 
 # Compila la APK y la publica como release.
 #  - Al subir un tag vX.Y.Z  -> release con ese número de versión.
-#  - A mano (Actions > APK de Android > Run workflow) -> release "build-N".
+#  - Al subir cambios a main (o a la rama de trabajo) o a mano desde
+#    Actions > APK de Android > Run workflow -> release "build-N".
 on:
   push:
     tags: ['v*']
+    branches: [main, claude/gym-tracker-app]
+    paths-ignore: ['**.md', 'legacy-streamlit/**']
   workflow_dispatch:
 
 permissions:
