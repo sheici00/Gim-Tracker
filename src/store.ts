@@ -2,13 +2,14 @@ import { useEffect, useState } from 'preact/hooks';
 import { SEED_EXERCISES } from './domain/exercises';
 import { suggestFor } from './domain/progression';
 import type { SyncDoc } from './domain/merge';
+import { allGroups, measureOf } from './domain/groups';
 import type { AppState, Exercise, PostMetrics, Routine, Session } from './domain/types';
 import { uid } from './domain/types';
 
 const KEY = 'gym-tracker-v1';
 
 const initial = (): AppState => ({
-  version: 1, exercises: SEED_EXERCISES, routines: [], sessions: [],
+  version: 1, exercises: SEED_EXERCISES, groups: [], routines: [], sessions: [],
   activeRoutineId: null, goal: 'hipertrofia_general', active: null, deleted: {}, prefsAt: 0,
 });
 
@@ -46,14 +47,15 @@ export function update(fn: (draft: AppState) => void) {
   fn(draft);
   // Marca qué cambió y qué se borró, para poder fusionar con otros dispositivos.
   const now = Date.now();
-  for (const key of ['routines', 'sessions'] as const) {
-    const before = new Map<string, Routine | Session>(prev[key].map((x) => [x.id, x]));
-    for (const x of draft[key]) {
+  for (const key of ['routines', 'sessions', 'groups', 'exercises'] as const) {
+    const before = new Map<string, { id: string }>((prev[key] as { id: string }[]).map((x) => [x.id, x]));
+    for (const x of draft[key] as { id: string; updatedAt?: number }[]) {
       const old = before.get(x.id);
       if (!old || JSON.stringify(old) !== JSON.stringify(x)) x.updatedAt = now;
       before.delete(x.id);
     }
-    for (const id of before.keys()) draft.deleted[id] = now;
+    // Los ejercicios no se eliminan; el resto deja una marca para sincronizar el borrado.
+    if (key !== 'exercises') for (const id of before.keys()) draft.deleted[id] = now;
   }
   if (draft.goal !== prev.goal || draft.activeRoutineId !== prev.activeRoutineId) draft.prefsAt = now;
   state = draft;
@@ -124,7 +126,12 @@ export function finishSession(post: PostMetrics): string | null {
     if (!a) return;
     a.finishedAt = Date.now();
     a.post = post;
-    a.suggestions = a.entries.map((e) => suggestFor(e, post, lastEntry(s.sessions, e.itemId)));
+    // La sobrecarga progresiva solo aplica a lo que se mide con peso.
+    const groups = allGroups(s);
+    const exById = new Map(s.exercises.map((e) => [e.id, e]));
+    a.suggestions = a.entries
+      .filter((e) => measureOf(exById.get(e.exerciseId), groups) === 'peso')
+      .map((e) => suggestFor(e, post, lastEntry(s.sessions, e.itemId)));
     s.sessions.push(a);
     s.active = null;
     id = a.id;

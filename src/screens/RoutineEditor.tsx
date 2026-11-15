@@ -2,6 +2,7 @@ import { useState } from 'preact/hooks';
 import { defaultBlock, defaultIncrement } from '../domain/exercises';
 import { exportRoutine } from '../domain/importer';
 import { getGoal } from '../domain/goals';
+import { allGroups, groupOf, measureOf } from '../domain/groups';
 import type { Category, Exercise, ExType, Muscle, Routine, RoutineItem } from '../domain/types';
 import { CATEGORY_LABEL, MUSCLE_LABEL, MUSCLES, uid } from '../domain/types';
 import { ask } from '../dialog';
@@ -11,11 +12,16 @@ import { Header, Num, parseNum, saveTextFile, type Go } from '../ui';
 /** Agrega un ejercicio a un día usando los rangos de repeticiones de la meta activa. */
 export function addExerciseToDay(routineId: string, dayId: string, e: Exercise) {
   const g = getGoal(getState().goal);
+  const group = groupOf(e, allGroups(getState()));
   const [repMin, repMax] = e.type === 'compuesto' ? g.compoundReps : g.isoReps;
+  // Lo que se mide por tiempo arranca con una duración típica y sin peso.
+  const item = group.measure === 'peso'
+    ? { block: defaultBlock(e), sets: 3, repMin, repMax, weight: 0, increment: defaultIncrement(e) }
+    : group.measure === 'min'
+      ? { block: group.name, sets: 1, repMin: 20, repMax: 30, weight: 0, increment: 0, unit: 'min' as const }
+      : { block: group.name, sets: 2, repMin: 30, repMax: 60, weight: 0, increment: 0, unit: 'seg' as const };
   update((s) => {
-    s.routines.find((r) => r.id === routineId)?.days.find((d) => d.id === dayId)?.items.push({
-      id: uid(), exerciseId: e.id, block: defaultBlock(e), sets: 3, repMin, repMax, weight: 0, increment: defaultIncrement(e),
-    });
+    s.routines.find((r) => r.id === routineId)?.days.find((d) => d.id === dayId)?.items.push({ id: uid(), exerciseId: e.id, ...item });
   });
 }
 
@@ -27,6 +33,7 @@ export function RoutineEditor({ id, go }: { id: string; go: Go }) {
   if (!routine) return <><Header title="Rutina" back={() => go({ n: 'routines' })} /><div class="empty">No existe.</div></>;
 
   const ex = new Map(s.exercises.map((e) => [e.id, e]));
+  const groups = allGroups(s);
   const edit = (fn: (r: Routine) => void) => update((d) => { const r = d.routines.find((x) => x.id === id); if (r) fn(r); });
   const remove = async () => {
     if (!(await ask(`¿Eliminar "${routine.name}"? El historial de sesiones se conserva.`))) return;
@@ -58,6 +65,8 @@ export function RoutineEditor({ id, go }: { id: string; go: Go }) {
             <div class="mt">
               {day.items.map((it, ii) => {
                 const e = ex.get(it.exerciseId);
+                const group = groupOf(e, groups);
+                const timed = group.measure !== 'peso';
                 const set = (k: 'sets' | 'repMin' | 'repMax' | 'weight' | 'increment') => (n: number) =>
                   edit((r) => {
                     const t = r.days[di].items[ii];
@@ -81,24 +90,24 @@ export function RoutineEditor({ id, go }: { id: string; go: Go }) {
                     <div class="row between">
                       <div class="grow">
                         <b>{e?.name ?? 'Ejercicio eliminado'}</b>
-                        <div class="muted">{e ? `${MUSCLE_LABEL[e.muscle]} · ${e.type}` : ''} · {it.block}</div>
+                        <div class="muted">{!e ? '' : timed ? group.name : `${MUSCLE_LABEL[e.muscle]} · ${e.type} · ${it.block}`}</div>
                       </div>
                       {ii > 0 && <button class="icon" aria-label="Subir" onClick={() => edit((r) => { const a = r.days[di].items; [a[ii - 1], a[ii]] = [a[ii], a[ii - 1]]; })}>↑</button>}
                       <button class="icon" aria-label="Quitar ejercicio" onClick={() => edit((r) => { r.days[di].items.splice(ii, 1); })}>×</button>
                     </div>
                     <div class="row wrap mt">
                       <Num label="Series" value={it.sets} onChange={set('sets')} w={48} />
-                      <Num label={it.unit === 'seg' ? 'Seg mín' : 'Reps mín'} value={it.repMin} onChange={set('repMin')} w={52} />
-                      <Num label={it.unit === 'seg' ? 'Seg máx' : 'Reps máx'} value={it.repMax} onChange={set('repMax')} w={52} />
-                      <Num label="Peso kg" value={it.weight} onChange={set('weight')} w={62} />
-                      <Num label="Salto kg" value={it.increment} onChange={set('increment')} w={52} />
+                      <Num label={(it.unit === 'min' ? 'Min' : it.unit === 'seg' ? 'Seg' : 'Reps') + ' mín'} value={it.repMin} onChange={set('repMin')} w={52} />
+                      <Num label={(it.unit === 'min' ? 'Min' : it.unit === 'seg' ? 'Seg' : 'Reps') + ' máx'} value={it.repMax} onChange={set('repMax')} w={52} />
+                      {!timed && <Num label="Peso kg" value={it.weight} onChange={set('weight')} w={62} />}
+                      {!timed && <Num label="Salto kg" value={it.increment} onChange={set('increment')} w={52} />}
                     </div>
                     <button class="link small mt" aria-expanded={open === it.id} onClick={() => setOpen(open === it.id ? null : it.id)}>
-                      {open === it.id ? 'Ocultar detalles' : extras ? `Detalles: ${extras}` : '+ Descanso, RPE, pesos por serie, notas'}
+                      {open === it.id ? 'Ocultar detalles' : extras ? `Detalles: ${extras}` : timed ? '+ Descanso y notas' : '+ Descanso, RPE, pesos por serie, notas'}
                     </button>
                     {open === it.id && (
                       <div class="more">
-                        <label class="field">Pesos por serie en kg (ej. 60/70/80; vacío = mismo peso)
+                        <label class="field" hidden={timed}>Pesos por serie en kg (ej. 60/70/80; vacío = mismo peso)
                           <input inputMode="decimal" value={it.setWeights?.join('/') ?? ''} placeholder={Array(it.sets).fill(it.weight).join('/')}
                             onChange={(e) => {
                               const list = e.currentTarget.value.split(/[\/;\s]+/).filter(Boolean).map(parseNum);
@@ -116,8 +125,8 @@ export function RoutineEditor({ id, go }: { id: string; go: Go }) {
                             <input style={{ width: '84px' }} value={it.tempo ?? ''} placeholder="3-1-1-0" onChange={(e) => patch({ tempo: e.currentTarget.value.trim() })} />
                           </label>
                           <label class="num"><span>Se mide en</span>
-                            <select value={it.unit ?? 'reps'} onChange={(e) => patch({ unit: e.currentTarget.value === 'seg' ? 'seg' : undefined })}>
-                              <option value="reps">Reps</option><option value="seg">Segundos</option>
+                            <select value={it.unit ?? 'reps'} onChange={(e) => patch({ unit: e.currentTarget.value === 'reps' ? undefined : (e.currentTarget.value as 'seg' | 'min') })}>
+                              <option value="reps">Reps</option><option value="seg">Segundos</option><option value="min">Minutos</option>
                             </select>
                           </label>
                         </div>
@@ -151,16 +160,20 @@ export function RoutineEditor({ id, go }: { id: string; go: Go }) {
 function ExercisePicker({ onPick, onClose }: { onPick: (e: Exercise) => void; onClose: () => void }) {
   const s = useStore();
   const [q, setQ] = useState('');
-  const [muscle, setMuscle] = useState<Muscle | ''>('');
+  const groups = allGroups(s);
+  const [groupId, setGroupId] = useState('');
   const [creating, setCreating] = useState(false);
-  const [draft, setDraft] = useState({ name: '', muscle: 'pecho' as Muscle, category: 'empuje_h' as Category, type: 'compuesto' as ExType });
+  const [draft, setDraft] = useState({ name: '', group: 'fuerza', muscle: 'pecho' as Muscle, category: 'empuje_h' as Category, type: 'compuesto' as ExType });
+  const draftTimed = (groups.find((g) => g.id === draft.group)?.measure ?? 'peso') !== 'peso';
   const nq = q.toLowerCase();
   const list = s.exercises
-    .filter((e) => (!muscle || e.muscle === muscle) && e.name.toLowerCase().includes(nq))
+    .filter((e) => (!groupId || groupOf(e, groups).id === groupId) && e.name.toLowerCase().includes(nq))
     .sort((a, b) => a.name.localeCompare(b.name));
 
   const create = () => {
-    const e: Exercise = { id: 'c_' + uid(), ...draft, name: draft.name.trim(), secondary: [], custom: true };
+    const e: Exercise = draftTimed
+      ? { id: 'c_' + uid(), name: draft.name.trim(), group: draft.group, category: 'accesorio', muscle: 'core', type: 'aislamiento', secondary: [], custom: true }
+      : { id: 'c_' + uid(), ...draft, name: draft.name.trim(), secondary: [], custom: true };
     update((d) => { d.exercises.push(e); });
     onPick(e);
   };
@@ -171,17 +184,22 @@ function ExercisePicker({ onPick, onClose }: { onPick: (e: Exercise) => void; on
       {creating ? (
         <>
           <label class="field">Nombre<input value={draft.name} onInput={(e) => setDraft({ ...draft, name: e.currentTarget.value })} /></label>
-          <label class="field mt">Grupo muscular
+          <label class="field mt">Grupo de actividad
+            <select value={draft.group} onChange={(e) => setDraft({ ...draft, group: e.currentTarget.value })}>
+              {groups.map((g) => <option value={g.id}>{g.name}</option>)}
+            </select>
+          </label>
+          <label class="field mt" hidden={draftTimed}>Grupo muscular
             <select value={draft.muscle} onChange={(e) => setDraft({ ...draft, muscle: e.currentTarget.value as Muscle })}>
               {MUSCLES.map((m) => <option value={m}>{MUSCLE_LABEL[m]}</option>)}
             </select>
           </label>
-          <label class="field mt">Categoría (patrón de movimiento)
+          <label class="field mt" hidden={draftTimed}>Categoría (patrón de movimiento)
             <select value={draft.category} onChange={(e) => setDraft({ ...draft, category: e.currentTarget.value as Category })}>
               {(Object.keys(CATEGORY_LABEL) as Category[]).map((c) => <option value={c}>{CATEGORY_LABEL[c]}</option>)}
             </select>
           </label>
-          <label class="field mt">Tipo
+          <label class="field mt" hidden={draftTimed}>Tipo
             <select value={draft.type} onChange={(e) => setDraft({ ...draft, type: e.currentTarget.value as ExType })}>
               <option value="compuesto">Compuesto</option>
               <option value="aislamiento">Aislamiento</option>
@@ -193,19 +211,19 @@ function ExercisePicker({ onPick, onClose }: { onPick: (e: Exercise) => void; on
         <>
           <input style={{ width: '100%' }} placeholder="Buscar…" value={q} onInput={(e) => setQ(e.currentTarget.value)} />
           <div class="row wrap mt">
-            <button class={'chip ' + (!muscle ? 'on' : '')} onClick={() => setMuscle('')}>Todos</button>
-            {MUSCLES.map((m) => <button key={m} class={'chip ' + (muscle === m ? 'on' : '')} onClick={() => setMuscle(m)}>{MUSCLE_LABEL[m]}</button>)}
+            <button class={'chip ' + (!groupId ? 'on' : '')} onClick={() => setGroupId('')}>Todos</button>
+            {groups.map((g) => <button key={g.id} class={'chip ' + (groupId === g.id ? 'on' : '')} onClick={() => setGroupId(g.id)}>{g.name}</button>)}
           </div>
           <div class="card mt">
             {list.map((e) => (
               <button class="item list-btn" key={e.id} onClick={() => onPick(e)}>
-                <div class="grow"><b>{e.name}</b><div class="muted">{MUSCLE_LABEL[e.muscle]} · {CATEGORY_LABEL[e.category]}</div></div>
-                <span class="tag">{e.type === 'compuesto' ? 'Comp.' : 'Aisl.'}</span>
+                <div class="grow"><b>{e.name}</b><div class="muted">{measureOf(e, groups) === 'peso' ? `${MUSCLE_LABEL[e.muscle]} · ${CATEGORY_LABEL[e.category]}` : groupOf(e, groups).name}</div></div>
+                {measureOf(e, groups) === 'peso' && <span class="tag">{e.type === 'compuesto' ? 'Comp.' : 'Aisl.'}</span>}
               </button>
             ))}
             {!list.length && <p class="muted">Sin resultados.</p>}
           </div>
-          <button class="btn block" onClick={() => { setDraft({ ...draft, name: q }); setCreating(true); }}>+ Crear ejercicio propio</button>
+          <button class="btn block" onClick={() => { setDraft({ ...draft, name: q, group: groupId || 'fuerza' }); setCreating(true); }}>+ Crear ejercicio propio</button>
         </>
       )}
     </div></div>

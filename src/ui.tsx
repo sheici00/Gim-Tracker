@@ -5,7 +5,7 @@ import { notify } from './dialog';
 export type View =
   | { n: 'home' } | { n: 'routines' } | { n: 'routine'; id: string } | { n: 'import' }
   | { n: 'workout' } | { n: 'post' } | { n: 'session'; id: string }
-  | { n: 'goal' } | { n: 'coach' } | { n: 'history' } | { n: 'settings' };
+  | { n: 'goal' } | { n: 'coach' } | { n: 'history' } | { n: 'settings' } | { n: 'groups' };
 export type Go = (v: View) => void;
 
 export const parseNum = (v: string) => {

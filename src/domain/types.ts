@@ -9,6 +9,18 @@ export type Category =
 
 export type ExType = 'compuesto' | 'aislamiento';
 
+/** Cómo se registra un grupo de actividades. */
+export type Measure = 'peso' | 'seg' | 'min';
+
+/** Agrupación de actividades: gimnasio, movilidad, aeróbico o las que cree el usuario. */
+export interface ActivityGroup {
+  id: string;
+  name: string;
+  measure: Measure;
+  builtin?: boolean;
+  updatedAt?: number;
+}
+
 export interface Exercise {
   id: string;
   name: string;
@@ -16,8 +28,11 @@ export interface Exercise {
   muscle: Muscle;
   secondary: Muscle[];
   type: ExType;
+  /** Id del grupo de actividades; sin valor = gimnasio (fuerza). */
+  group?: string;
   aliases?: string[];
   custom?: boolean;
+  updatedAt?: number;
 }
 
 export interface RoutineItem {
@@ -31,8 +46,8 @@ export interface RoutineItem {
   weight: number;
   /** Salto de sobrecarga progresiva en kg. */
   increment: number;
-  /** 'seg' para ejercicios por tiempo (planchas, isométricos). */
-  unit?: 'reps' | 'seg';
+  /** 'seg' o 'min' para ejercicios por tiempo (planchas, movilidad, aeróbico). */
+  unit?: 'reps' | 'seg' | 'min';
   /** Peso por serie cuando no es el mismo en todas (pirámides, back-off sets). */
   setWeights?: number[];
   /** Descanso en segundos; si falta se usa el de la meta. */
@@ -56,7 +71,7 @@ export interface SessionEntry {
   repMax: number;
   targetWeight: number;
   increment: number;
-  unit?: 'reps' | 'seg';
+  unit?: 'reps' | 'seg' | 'min';
   restSec?: number;
   targetRpe?: number;
   tempo?: string;
@@ -106,6 +121,8 @@ export type GoalId = 'hipertrofia_superior' | 'hipertrofia_general' | 'hipertrof
 export interface AppState {
   version: 1;
   exercises: Exercise[];
+  /** Grupos de actividades creados por el usuario (los de base están en groups.ts). */
+  groups: ActivityGroup[];
   routines: Routine[];
   sessions: Session[];
   activeRoutineId: string | null;

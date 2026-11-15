@@ -11,7 +11,7 @@ function toDocs(doc: SyncDoc): Map<string, Record<string, unknown>> {
   const out = new Map<string, Record<string, unknown>>();
   out.set('meta', {
     goal: doc.goal, activeRoutineId: doc.activeRoutineId, prefsAt: doc.prefsAt, deleted: doc.deleted,
-    exercises: doc.exercises.filter((e) => e.custom),
+    exercises: doc.exercises.filter((e) => e.custom || e.updatedAt), groups: doc.groups,
   });
   for (const r of doc.routines) out.set('r_' + r.id, { routine: r });
   for (const s of doc.sessions) out.set('s_' + s.id, { session: s });
@@ -26,7 +26,7 @@ function fromDocs(docs: Map<string, Record<string, unknown>>): SyncDoc {
     if (id.startsWith('s_') && body.session) sessions.push(body.session as Session);
   }
   return {
-    version: 1, routines, sessions, exercises: (meta.exercises ?? []) as Exercise[],
+    version: 1, routines, sessions, exercises: (meta.exercises ?? []) as Exercise[], groups: meta.groups ?? [],
     goal: meta.goal ?? 'hipertrofia_general', activeRoutineId: meta.activeRoutineId ?? null,
     deleted: meta.deleted ?? {}, prefsAt: meta.prefsAt ?? 0,
   };

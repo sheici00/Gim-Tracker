@@ -14,6 +14,12 @@ export const norm = (s: string) =>
     .split(/\s+/).filter((w) => w && !STOP.has(w)).join(' ');
 
 // Heurística para clasificar ejercicios que no están en la biblioteca.
+// Actividades que no son de fuerza: se asignan a su grupo y se miden por tiempo.
+const GUESS_GROUP: [RegExp, 'movilidad' | 'aerobico'][] = [
+  [/movilidad|estiramiento|elongacion|stretch|rotacion|circulos|foam|liberacion/, 'movilidad'],
+  [/cinta|trote|correr|running|caminata|bici|spinning|eliptic|ergometro|soga|cuerda|cardio|aerobic|hiit|intervalos|natacion|escalador/, 'aerobico'],
+];
+
 const GUESS: [RegExp, Category, Muscle, ExType][] = [
   [/sentadilla|squat|prensa|zancada|estocada|bulgara/, 'rodilla', 'cuadriceps', 'compuesto'],
   [/cuadriceps|extension pierna/, 'rodilla', 'cuadriceps', 'aislamiento'],
@@ -32,8 +38,11 @@ const GUESS: [RegExp, Category, Muscle, ExType][] = [
   [/abdominal|crunch|plancha|core|oblicuo/, 'core', 'core', 'aislamiento'],
 ];
 
-function guessExercise(name: string): Exercise {
+function guessExercise(name: string, groupHint?: string): Exercise {
   const n = norm(name);
+  const g = norm(groupHint ?? '');
+  const group = /movilidad|estiramiento/.test(g) ? 'movilidad' : /aerobic|cardio/.test(g) ? 'aerobico' : GUESS_GROUP.find(([re]) => re.test(n))?.[1];
+  if (group) return { id: 'c_' + uid(), name: name.trim(), category: 'accesorio', muscle: 'core', secondary: [], type: 'aislamiento', group, custom: true };
   const hit = GUESS.find(([re]) => re.test(n));
   const [, category, muscle, type] = hit ?? [null, 'accesorio' as Category, 'core' as Muscle, 'aislamiento' as ExType];
   return { id: 'c_' + uid(), name: name.trim(), category, muscle, secondary: [], type, custom: true };
@@ -60,7 +69,7 @@ function matchExercise(name: string, library: Exercise[]): Exercise | undefined 
 
 interface RawItem {
   name: string; sets: number; repMin: number; repMax: number;
-  weight?: number; increment?: number; block?: string; unit?: 'reps' | 'seg';
+  weight?: number; increment?: number; block?: string; unit?: 'reps' | 'seg' | 'min'; group?: string;
   setWeights?: number[]; restSec?: number; targetRpe?: number; tempo?: string; notes?: string;
 }
 interface RawDay { name: string; notes?: string; items: RawItem[] }
@@ -125,7 +134,8 @@ function fromJson(data: any, warnings: string[]): RawRoutine[] {
           ...w, weight: opt(num(x.weight ?? x.peso ?? x.kg)) ?? w.weight,
           increment: opt(num(x.increment ?? x.incremento ?? x.salto)),
           block: str(x.block ?? x.bloque ?? x.superset ?? x.superserie),
-          unit: /^seg|^sec|^s$/i.test(String(x.unit ?? x.unidad ?? '')) ? 'seg' : undefined,
+          unit: /^min/i.test(String(x.unit ?? x.unidad ?? '')) ? 'min' : /^seg|^sec|^s$/i.test(String(x.unit ?? x.unidad ?? '')) ? 'seg' : undefined,
+          group: str(x.group ?? x.grupo),
           restSec: parseRest(x.restSec ?? x.rest ?? x.descanso),
           targetRpe: opt(rpe) ?? (isNaN(rir) ? undefined : 10 - rir),
           tempo: str(x.tempo), notes: str(x.notes ?? x.notas ?? x.nota),
@@ -152,7 +162,8 @@ function parseExerciseLine(line: string): RawItem | null {
   const a = +m[3], b = m[4] ? +m[4] : a;
   let rest = m[5];
   const item: RawItem = { name: m[1].trim(), sets: +m[2], repMin: Math.min(a, b), repMax: Math.max(a, b) };
-  if (/^\s*(s|seg|segundos|")(?![a-z])/i.test(rest)) { item.unit = 'seg'; rest = rest.replace(/^\s*(segundos|seg|s|")/i, ''); }
+  if (/^\s*(min|minutos|')(?![a-z])/i.test(rest)) { item.unit = 'min'; rest = rest.replace(/^\s*(minutos|min|')/i, ''); }
+  else if (/^\s*(s|seg|segundos|")(?![a-z])/i.test(rest)) { item.unit = 'seg'; rest = rest.replace(/^\s*(segundos|seg|s|")/i, ''); }
   const take = (re: RegExp) => { const x = rest.match(re); if (x) rest = rest.replace(x[0], ' '); return x; };
   const rpe = take(/rpe\s*:?\s*(\d+(?:[.,]\d+)?)/i);
   const rir = take(/rir\s*:?\s*(\d+)/i);
@@ -196,7 +207,7 @@ function fromText(text: string, warnings: string[]): RawRoutine[] {
 }
 
 /* ---------- Tablas: CSV, TSV, Excel, Markdown ---------- */
-type Col = 'day' | 'name' | 'sets' | 'reps' | 'weight' | 'rest' | 'rpe' | 'rir' | 'tempo' | 'notes' | 'block';
+type Col = 'day' | 'name' | 'sets' | 'reps' | 'weight' | 'rest' | 'rpe' | 'rir' | 'tempo' | 'notes' | 'block' | 'group';
 const HEADERS: [Col, RegExp][] = [
   ['day', /^(dia|day|jornada|sesion)s?$/],
   ['name', /^(ejercicio|exercise|nombre|movimiento|name)s?$/],
@@ -206,7 +217,8 @@ const HEADERS: [Col, RegExp][] = [
   ['rest', /^(descanso|rest|pausa|descanso seg|descanso s)$/],
   ['rpe', /^rpe( objetivo)?$/], ['rir', /^rir$/], ['tempo', /^tempo$/],
   ['notes', /^(notas?|observacion(es)?|notes?|comentarios?|indicaciones)$/],
-  ['block', /^(bloque|superserie|block|superset|grupo)$/],
+  ['block', /^(bloque|superserie|block|superset)$/],
+  ['group', /^(grupo|tipo|actividad|categoria|group|type)$/],
 ];
 const headerKey = (cell: string) => norm(cell.replace(/[()]/g, ' '));
 
@@ -253,7 +265,8 @@ function fromTable(rows: string[][], fallbackDay: string | undefined, warnings: 
     const rpe = num(cell(r, 'rpe')), rir = num(cell(r, 'rir'));
     day!.items.push({
       name, sets, repMin: reps[0], repMax: reps[1], ...parseWeights(cell(r, 'weight')),
-      unit: /\d\s*(s|seg|")\s*$/i.test(cell(r, 'reps')) ? 'seg' : undefined,
+      unit: /\d\s*(min|minutos|')\s*$/i.test(cell(r, 'reps')) ? 'min' : /\d\s*(s|seg|")\s*$/i.test(cell(r, 'reps')) ? 'seg' : undefined,
+      group: str(cell(r, 'group')),
       restSec: cell(r, 'rest') ? parseRest(cell(r, 'rest')) : undefined,
       targetRpe: opt(rpe) ?? (isNaN(rir) ? undefined : 10 - rir),
       tempo: str(cell(r, 'tempo')), notes: str(cell(r, 'notes')), block: str(cell(r, 'block')),
@@ -320,19 +333,23 @@ function finalize(raw: RawRoutine[], library: Exercise[], warnings: string[]): I
       items: d.items.map((it): RoutineItem => {
         let ex = matchExercise(it.name, lib);
         if (!ex) {
-          ex = guessExercise(it.name);
+          ex = guessExercise(it.name, it.group);
           lib.push(ex); newExercises.push(ex);
-          warnings.push(`"${it.name}" no estaba en la biblioteca: se creó como ${ex.type} de ${ex.muscle} (revisalo).`);
+          warnings.push(ex.group
+            ? `"${it.name}" no estaba en la biblioteca: se creó en el grupo ${ex.group === 'movilidad' ? 'Movilidad articular' : 'Aeróbico'} (revisalo).`
+            : `"${it.name}" no estaba en la biblioteca: se creó como ${ex.type} de ${ex.muscle} (revisalo).`);
         }
         const sets = Math.max(1, Math.round(it.sets));
+        // Movilidad y aeróbico se miden por tiempo aunque el original no lo aclare.
+        const timed = ex.group === 'movilidad' ? 'seg' : ex.group === 'aerobico' ? 'min' : undefined;
         const setWeights = it.setWeights && it.setWeights.length > 1
           ? Array.from({ length: sets }, (_, i) => it.setWeights![Math.min(i, it.setWeights!.length - 1)]) : undefined;
         return {
-          id: uid(), exerciseId: ex.id, block: it.block ?? defaultBlock(ex),
+          id: uid(), exerciseId: ex.id, block: it.block ?? (ex.group === 'movilidad' ? 'Movilidad' : ex.group === 'aerobico' ? 'Aeróbico' : defaultBlock(ex)),
           sets, repMin: it.repMin, repMax: it.repMax,
           weight: setWeights ? Math.min(...setWeights) : it.weight ?? 0,
-          increment: it.increment ?? defaultIncrement(ex),
-          unit: it.unit, setWeights, restSec: it.restSec, targetRpe: it.targetRpe, tempo: it.tempo, notes: it.notes,
+          increment: it.increment ?? (timed ? 0 : defaultIncrement(ex)),
+          unit: it.unit ?? timed, setWeights, restSec: it.restSec, targetRpe: it.targetRpe, tempo: it.tempo, notes: it.notes,
         };
       }),
     })),

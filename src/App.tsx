@@ -2,6 +2,7 @@ import { useState } from 'preact/hooks';
 import { DialogHost } from './dialog';
 import { Coach } from './screens/Coach';
 import { GoalScreen } from './screens/Goal';
+import { Groups } from './screens/Groups';
 import { History, SessionDetail } from './screens/History';
 import { Home } from './screens/Home';
 import { ImportScreen } from './screens/Import';
@@ -38,6 +39,7 @@ export function App() {
         {view.n === 'goal' && <GoalScreen />}
         {view.n === 'coach' && <Coach go={go} />}
         {view.n === 'settings' && <Settings go={go} />}
+        {view.n === 'groups' && <Groups go={go} />}
         {view.n === 'history' && <History go={go} />}
       </main>
       <DialogHost />

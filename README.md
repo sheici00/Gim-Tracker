@@ -200,6 +200,23 @@ Cada ejercicio de una rutina tiene:
 
 Desde el editor de cada rutina se puede **exportar** en este mismo formato.
 
+## Grupos de actividades
+
+Cada ejercicio pertenece a un grupo, que define cómo se registra:
+
+| Grupo | Se registra | Cuenta para volumen muscular y sobrecarga progresiva |
+| --- | --- | --- |
+| Gimnasio (fuerza) | Peso y repeticiones | Sí |
+| Movilidad articular | Segundos | No |
+| Aeróbico | Minutos | No |
+| Los que crees vos | Peso, segundos o minutos, a elección | Solo si se mide con peso |
+
+En **Rutinas → Grupos de actividades** se crean, renombran y eliminan grupos, y se mueven
+ejercicios de uno a otro. Al agregar un ejercicio a una rutina se filtra por grupo. El importador
+reconoce movilidad y aeróbico por el nombre (cinta, bicicleta, estiramiento…) o por una columna
+"Grupo", y entiende duraciones como `Cinta 1x20-30 min`. El coach avisa si la rutina no tiene
+movilidad o trabajo aeróbico.
+
 ## Auto-regulación (`src/domain/progression.ts`)
 
 | Situación | Sugerencia |

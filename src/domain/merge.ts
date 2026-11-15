@@ -1,10 +1,10 @@
 import type { AppState, Exercise } from './types';
 
 /** La parte del estado que viaja entre dispositivos (todo menos el entrenamiento en curso). */
-export type SyncDoc = Pick<AppState, 'version' | 'exercises' | 'routines' | 'sessions' | 'activeRoutineId' | 'goal' | 'deleted' | 'prefsAt'>;
+export type SyncDoc = Pick<AppState, 'version' | 'exercises' | 'groups' | 'routines' | 'sessions' | 'activeRoutineId' | 'goal' | 'deleted' | 'prefsAt'>;
 
 export const toSyncDoc = (s: AppState): SyncDoc => ({
-  version: 1, exercises: s.exercises, routines: s.routines, sessions: s.sessions,
+  version: 1, exercises: s.exercises, groups: s.groups ?? [], routines: s.routines, sessions: s.sessions,
   activeRoutineId: s.activeRoutineId, goal: s.goal, deleted: s.deleted, prefsAt: s.prefsAt,
 });
 
@@ -28,8 +28,9 @@ export function mergeDocs(a: SyncDoc, b: SyncDoc): SyncDoc {
   const deleted: Record<string, number> = { ...b.deleted };
   for (const [id, t] of Object.entries(a.deleted ?? {})) deleted[id] = Math.max(t, deleted[id] ?? 0);
 
-  const ex = new Map<string, Exercise>();
-  for (const e of [...(b.exercises ?? []), ...(a.exercises ?? [])]) if (!ex.has(e.id)) ex.set(e.id, e);
+  // Ejercicios: unión; si se editó en ambos lados gana el cambio más reciente. No se borran.
+  const exercises = mergeById<Exercise>(a.exercises ?? [], b.exercises ?? [], {}).sort((x, y) => x.id.localeCompare(y.id));
+  const groups = mergeById(a.groups ?? [], b.groups ?? [], deleted).sort((x, y) => x.id.localeCompare(y.id));
 
   const routines = mergeById(a.routines ?? [], b.routines ?? [], deleted).sort((x, y) => x.id.localeCompare(y.id));
   const sessions = mergeById(a.sessions ?? [], b.sessions ?? [], deleted).sort((x, y) => x.startedAt - y.startedAt || x.id.localeCompare(y.id));
@@ -38,8 +39,7 @@ export function mergeDocs(a: SyncDoc, b: SyncDoc): SyncDoc {
 
   return {
     version: 1,
-    exercises: [...ex.values()].sort((x, y) => x.id.localeCompare(y.id)),
-    routines, sessions, activeRoutineId, goal: prefs.goal, deleted,
+    exercises, groups, routines, sessions, activeRoutineId, goal: prefs.goal, deleted,
     prefsAt: Math.max(a.prefsAt ?? 0, b.prefsAt ?? 0),
   };
 }

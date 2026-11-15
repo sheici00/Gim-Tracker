@@ -2,6 +2,7 @@ import { useState } from 'preact/hooks';
 import { picksFor } from '../domain/coach';
 import { getGoal, GOALS } from '../domain/goals';
 import { MUSCLE_LABEL, MUSCLES } from '../domain/types';
+import { allGroups, strengthOnly } from '../domain/groups';
 import { exMap, weeklySets } from '../domain/volume';
 import { ask } from '../dialog';
 import { update, useStore } from '../store';
@@ -13,7 +14,7 @@ export function GoalScreen() {
   const goal = getGoal(s.goal);
   const routine = s.routines.find((r) => r.id === s.activeRoutineId);
   const ex = exMap(s.exercises);
-  const vol = routine ? weeklySets(routine, ex) : null;
+  const vol = routine ? weeklySets(strengthOnly(routine, ex, allGroups(s)), ex) : null;
   const [dayId, setDayId] = useState('');
   const day = routine?.days.find((d) => d.id === dayId) ?? routine?.days[0];
   const SCALE = 26;
@@ -56,7 +57,7 @@ export function GoalScreen() {
         <>
           <div class="section">Volumen semanal vs. objetivo</div>
           <div class="card">
-            <p class="muted">Series por semana en "{routine.name}". La franja clara es el rango recomendado.</p>
+            <p class="muted">Series de fuerza por semana en "{routine.name}". La franja clara es el rango recomendado. Movilidad y aeróbico no cuentan acá.</p>
             {MUSCLES.map((m) => {
               const [min, max] = goal.targets[m];
               const v = vol[m];

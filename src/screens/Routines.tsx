@@ -37,6 +37,7 @@ export function Routines({ go }: { go: Go }) {
         <button class="btn grow primary" onClick={() => go({ n: 'import' })}>Importar</button>
         <button class="btn grow" onClick={create}>Crear vacía</button>
       </div>
+      <button class="btn block mt" onClick={() => go({ n: 'groups' })}>Grupos de actividades</button>
       <div class="section">Plantillas base</div>
       {TEMPLATES.map((t, i) => (
         <div class="card" key={t.name}>

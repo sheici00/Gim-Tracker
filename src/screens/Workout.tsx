@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'preact/hooks';
 import { getGoal } from '../domain/goals';
+import { allGroups, groupOf } from '../domain/groups';
 import type { SessionEntry } from '../domain/types';
 import { ask } from '../dialog';
 import { update, useStore } from '../store';
@@ -22,6 +23,7 @@ export function Workout({ go }: { go: Go }) {
 
   const ex = new Map(s.exercises.map((e) => [e.id, e]));
   const goal = getGoal(s.goal);
+  const groups = allGroups(s);
   const edit = (ei: number, fn: (e: SessionEntry) => void) => update((d) => { if (d.active) fn(d.active.entries[ei]); });
   const doneSets = a.entries.reduce((n, e) => n + e.sets.filter((x) => x.done).length, 0);
   const totalSets = a.entries.reduce((n, e) => n + e.sets.length, 0);
@@ -46,27 +48,31 @@ export function Workout({ go }: { go: Go }) {
 
       {a.entries.map((e, ei) => {
         const x = ex.get(e.exerciseId);
+        const group = groupOf(x, groups);
+        const timed = group.measure !== 'peso';
+        const unit = e.unit === 'min' ? 'min' : e.unit === 'seg' ? 'seg' : 'reps';
         return (
           <div class="card mt" key={e.itemId}>
             <div class="row between">
               <h3 class="grow">{x?.name ?? 'Ejercicio'}</h3>
-              <span class="tag">{e.repMin === e.repMax ? e.repMin : `${e.repMin}-${e.repMax}`} {e.unit === 'seg' ? 'seg' : 'reps'}</span>
+              <span class="tag">{e.repMin === e.repMax ? e.repMin : `${e.repMin}-${e.repMax}`} {unit}</span>
             </div>
             {(e.targetRpe || e.tempo || e.restSec || e.notes) && (
               <p class="muted">
                 {[e.targetRpe && `RPE ${e.targetRpe}`, e.tempo && `tempo ${e.tempo}`, e.restSec && `descanso ${e.restSec}s`, e.notes].filter(Boolean).join(' · ')}
               </p>
             )}
-            <div class="set head"><span>#</span><span>Kg</span><span>{e.unit === 'seg' ? 'Seg' : 'Reps'}</span><span>OK</span></div>
+            {timed && <p class="muted">{group.name}</p>}
+            <div class={'set head ' + (timed ? 'timed' : '')}><span>#</span>{!timed && <span>Kg</span>}<span>{unit === 'min' ? 'Minutos' : unit === 'seg' ? 'Segundos' : 'Reps'}</span><span>OK</span></div>
             {e.sets.map((st, si) => (
-              <div class={'set ' + (st.done ? 'done' : '')} key={si}>
+              <div class={'set ' + (timed ? 'timed ' : '') + (st.done ? 'done' : '')} key={si}>
                 <span class="idx">{si + 1}</span>
-                <Stepper label="peso" value={st.weight} step={e.increment >= 2.5 ? 2.5 : 1}
+                {!timed && <Stepper label="peso" value={st.weight} step={e.increment >= 2.5 ? 2.5 : 1}
                   onChange={(n) => edit(ei, (d) => {
                     // Cambiar el peso de una serie lo propaga a las siguientes sin completar.
                     d.sets.forEach((t, i) => { if (i === si || (i > si && !t.done)) t.weight = n; });
-                  })} />
-                <Stepper label="repeticiones" value={st.reps} step={e.unit === 'seg' ? 5 : 1} onChange={(n) => edit(ei, (d) => { d.sets[si].reps = Math.round(n); })} />
+                  })} />}
+                <Stepper label="repeticiones" value={st.reps} step={unit === 'seg' ? 5 : 1} onChange={(n) => edit(ei, (d) => { d.sets[si].reps = Math.round(n); })} />
                 <button class={'check ' + (st.done ? 'on' : '')} aria-label={`Serie ${si + 1} completada`} aria-pressed={st.done} onClick={() => toggle(ei, si)}>✓</button>
               </div>
             ))}

@@ -73,7 +73,7 @@ const ROUTINE_SCHEMA = {
                     properties: {
                       name: { type: 'string' }, block: nullable('string'),
                       sets: { type: 'integer' }, repMin: { type: 'integer' }, repMax: { type: 'integer' },
-                      unit: { type: 'string', enum: ['reps', 'seg'] },
+                      unit: { type: 'string', enum: ['reps', 'seg', 'min'] },
                       weight: nullable('number'),
                       setWeights: { anyOf: [{ type: 'array', items: { type: 'number' } }, { type: 'null' }] },
                       restSec: nullable('integer'), targetRpe: nullable('number'),

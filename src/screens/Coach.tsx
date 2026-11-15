@@ -3,6 +3,7 @@ import { IS_ARTIFACT, loadAi, useAiReady, type ChatMessage } from '../ai';
 import { audit, buildSystemPrompt } from '../domain/coach';
 import { getGoal } from '../domain/goals';
 import { CATEGORY_LABEL, type Category } from '../domain/types';
+import { allGroups, strengthOnly } from '../domain/groups';
 import { categorySets, exMap } from '../domain/volume';
 import { getState, useStore } from '../store';
 import { Header, type Go } from '../ui';
@@ -31,7 +32,8 @@ export function Coach({ go }: { go: Go }) {
 
   const findings = audit(s);
   const routine = s.routines.find((r) => r.id === s.activeRoutineId);
-  const cat = routine ? categorySets(routine, exMap(s.exercises)) : null;
+  const exById = exMap(s.exercises);
+  const cat = routine ? categorySets(strengthOnly(routine, exById, allGroups(s)), exById) : null;
   const busy = partial !== null;
 
   const send = async (text: string) => {

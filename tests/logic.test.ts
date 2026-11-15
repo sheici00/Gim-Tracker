@@ -64,7 +64,7 @@ describe('importador', () => {
 describe('coach', () => {
   const stateWith = (text: string): AppState => {
     const { routines } = importRoutines(text, SEED_EXERCISES);
-    return { version: 1, exercises: SEED_EXERCISES, routines, sessions: [], activeRoutineId: routines[0].id, goal: 'hipertrofia_general', active: null, deleted: {}, prefsAt: 0 };
+    return { version: 1, exercises: SEED_EXERCISES, routines, sessions: [], activeRoutineId: routines[0].id, goal: 'hipertrofia_general', active: null, deleted: {}, prefsAt: 0, groups: [] };
   };
   it('detecta exceso de empuje y falta de cadena posterior', () => {
     const titles = audit(stateWith('Día 1\nPress de banca 5x8\nPress militar 4x8\nFondos 4x8\nRemo con barra 3x8\nSentadilla 5x8\nPrensa 4x10')).map((f) => f.title);
@@ -123,7 +123,7 @@ describe('formatos de importación', () => {
 });
 
 describe('sincronización', () => {
-  const doc = (p: Partial<SyncDoc>): SyncDoc => ({ version: 1, exercises: [], routines: [], sessions: [], activeRoutineId: null, goal: 'hipertrofia_general', deleted: {}, prefsAt: 0, ...p });
+  const doc = (p: Partial<SyncDoc>): SyncDoc => ({ version: 1, exercises: [], groups: [], routines: [], sessions: [], activeRoutineId: null, goal: 'hipertrofia_general', deleted: {}, prefsAt: 0, ...p });
   const r = (id: string, name: string, updatedAt: number) => ({ id, name, days: [], updatedAt });
   const ses = (id: string, startedAt: number) => ({ id, routineId: 'r1', dayId: 'd', dayName: 'D', startedAt, entries: [], updatedAt: startedAt });
 
@@ -141,5 +141,48 @@ describe('sincronización', () => {
     const m = mergeDocs(doc({ routines: [r('r1', 'a', 1)], activeRoutineId: 'r1' }), doc({ deleted: { r1: 9 } }));
     expect(m.routines).toEqual([]);
     expect(m.activeRoutineId).toBeNull();
+  });
+});
+
+import { BUILTIN_GROUPS, daySummary, strengthOnly } from '../src/domain/groups';
+import { exMap, weeklySets } from '../src/domain/volume';
+
+describe('grupos de actividades', () => {
+  const text = 'Día 1\nMovilidad de cadera 90/90 2x30-60s\nPress de banca 4x6-8 @80\nCinta 1x20-30 min\nYoga restaurativo 1x15 min\nEstiramiento de pectoral 2x30s';
+  const res = importRoutines(text, SEED_EXERCISES);
+  const lib = [...SEED_EXERCISES, ...res.newExercises];
+  const ex = exMap(lib);
+  const items = res.routines[0].days[0].items;
+
+  it('reconoce movilidad y aeróbico al importar y los mide por tiempo', () => {
+    expect(items.map((i) => [ex.get(i.exerciseId)!.group ?? 'fuerza', i.unit ?? 'reps'])).toEqual([
+      ['movilidad', 'seg'], ['fuerza', 'reps'], ['aerobico', 'min'], ['fuerza', 'min'], ['movilidad', 'seg'],
+    ]);
+    expect(items[2]).toMatchObject({ exerciseId: 'aer_cinta', sets: 1, repMin: 20, repMax: 30, weight: 0, increment: 0 });
+  });
+  it('el volumen muscular solo cuenta los ejercicios con peso', () => {
+    const strength = strengthOnly(res.routines[0], ex, BUILTIN_GROUPS);
+    expect(strength.days[0].items).toHaveLength(2);
+    expect(weeklySets(strength, ex).pecho).toBe(4);
+    expect(daySummary(items, ex, BUILTIN_GROUPS)).toBe('2 gimnasio (fuerza) · 2 movilidad articular · 1 aeróbico');
+  });
+  it('el coach avisa si falta movilidad o aeróbico, y no si están', () => {
+    const state = (t: string): AppState => {
+      const r = importRoutines(t, SEED_EXERCISES);
+      return { version: 1, exercises: [...SEED_EXERCISES, ...r.newExercises], groups: [], routines: r.routines, sessions: [], activeRoutineId: r.routines[0].id, goal: 'hipertrofia_general', active: null, deleted: {}, prefsAt: 0 };
+    };
+    const without = audit(state('Día 1\nPress de banca 4x8')).map((f) => f.title);
+    expect(without).toEqual(expect.arrayContaining(['Sin movilidad articular', 'Sin trabajo aeróbico']));
+    const withBoth = audit(state('Día 1\nPress de banca 4x8\nGato-camello 2x30s\nBicicleta fija 3x30 min')).map((f) => f.title);
+    expect(withBoth.some((t) => /movilidad|aeróbico/i.test(t))).toBe(false);
+  });
+  it('los grupos propios y los ejercicios movidos se sincronizan', () => {
+    const base = { version: 1 as const, routines: [], sessions: [], activeRoutineId: null, goal: 'hipertrofia_general' as const, deleted: {}, prefsAt: 0 };
+    const phone = { ...base, groups: [{ id: 'g1', name: 'Rehabilitación', measure: 'seg' as const, updatedAt: 5 }], exercises: [{ ...SEED_EXERCISES[0], group: 'g1', updatedAt: 6 }] };
+    const pc = { ...base, groups: [], exercises: [SEED_EXERCISES[0]] };
+    const m = mergeDocs(pc, phone);
+    expect(m.groups.map((g) => g.name)).toEqual(['Rehabilitación']);
+    expect(m.exercises[0].group).toBe('g1');
+    expect(mergeDocs(m, { ...pc, deleted: { g1: 9 } }).groups).toEqual([]);
   });
 });

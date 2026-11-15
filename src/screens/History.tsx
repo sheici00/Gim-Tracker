@@ -1,5 +1,6 @@
 import { useState } from 'preact/hooks';
 import { ask } from '../dialog';
+import { allGroups, measureOf } from '../domain/groups';
 import { applySuggestions, update, useStore } from '../store';
 import { Header, kg, type Go } from '../ui';
 
@@ -14,7 +15,9 @@ export function SessionDetail({ id, go }: { id: string; go: Go }) {
   const ex = new Map(s.exercises.map((e) => [e.id, e]));
   const sugs = ses.suggestions ?? [];
   const sel = picked ?? sugs.filter((x) => x.action !== 'mantener' || x.to !== x.from).map((x) => x.itemId);
-  const volume = ses.entries.reduce((a, e) => a + e.sets.filter((x) => x.done).reduce((b, x) => b + x.weight * x.reps, 0), 0);
+  const groups = allGroups(s);
+  const timedEntry = (e: { exerciseId: string }) => measureOf(ex.get(e.exerciseId), groups) !== 'peso';
+  const volume = ses.entries.filter((e) => !timedEntry(e)).reduce((a, e) => a + e.sets.filter((x) => x.done).reduce((b, x) => b + x.weight * x.reps, 0), 0);
   const mins = Math.max(1, Math.round(((ses.finishedAt ?? ses.startedAt) - ses.startedAt) / 60000));
   const routineExists = s.routines.some((r) => r.id === ses.routineId);
   const del = async () => {
@@ -69,7 +72,7 @@ export function SessionDetail({ id, go }: { id: string; go: Go }) {
                 {ses.post?.pain.includes(e.exerciseId) && <span class="chip bad on">Molestia</span>}
               </span>
             </div>
-            <p class="muted">{e.sets.filter((x) => x.done).map((x) => `${String(x.weight).replace('.', ',')}×${x.reps}`).join('  ·  ') || 'Sin series registradas'}</p>
+            <p class="muted">{e.sets.filter((x) => x.done).map((x) => (timedEntry(e) ? `${x.reps} ${e.unit ?? 'seg'}` : `${String(x.weight).replace('.', ',')}×${x.reps}`)).join('  ·  ') || 'Sin series registradas'}</p>
           </div>
         ))}
       </div>

@@ -63,9 +63,35 @@ const ROWS: Row[] = [
   ['rueda_abdominal', 'Rueda abdominal', 'core', 'core', [], A, ['ab wheel']],
 ];
 
-export const SEED_EXERCISES: Exercise[] = ROWS.map(([id, name, category, muscle, secondary, type, aliases]) => ({
-  id, name, category, muscle, secondary, type, aliases,
-}));
+// Movilidad articular y aeróbico: se registran por tiempo y no cuentan para el volumen muscular.
+const TIMED: [string, string, 'movilidad' | 'aerobico', string[]?][] = [
+  ['mov_cadera_90_90', 'Movilidad de cadera 90/90', 'movilidad', ['90 90', 'cadera 90/90']],
+  ['mov_cadera_circulos', 'Círculos de cadera', 'movilidad', ['rotaciones de cadera']],
+  ['mov_gato_camello', 'Gato-camello', 'movilidad', ['cat cow', 'gato vaca']],
+  ['mov_toracica', 'Rotaciones torácicas', 'movilidad', ['movilidad toracica', 'libro abierto']],
+  ['mov_hombros', 'Círculos de hombros', 'movilidad', ['movilidad de hombros', 'dislocaciones con banda']],
+  ['mov_tobillo', 'Movilidad de tobillo', 'movilidad', ['dorsiflexion de tobillo']],
+  ['mov_sentadilla_profunda', 'Sentadilla profunda sostenida', 'movilidad', ['deep squat hold']],
+  ['mov_zancada_rotacion', 'Zancada con rotación', 'movilidad', ['worlds greatest stretch', 'estocada con rotacion']],
+  ['mov_isquios', 'Estiramiento de isquiotibiales', 'movilidad', ['elongacion isquios']],
+  ['mov_flexores_cadera', 'Estiramiento de flexores de cadera', 'movilidad', ['estiramiento psoas']],
+  ['aer_cinta', 'Cinta (trote o caminata)', 'aerobico', ['cinta', 'trote', 'correr', 'caminata', 'treadmill']],
+  ['aer_bici', 'Bicicleta fija', 'aerobico', ['bici', 'bicicleta', 'spinning']],
+  ['aer_eliptico', 'Elíptico', 'aerobico', ['eliptica']],
+  ['aer_remo', 'Remo ergómetro', 'aerobico', ['remoergometro', 'rowing machine', 'maquina de remo']],
+  ['aer_soga', 'Saltar la soga', 'aerobico', ['soga', 'cuerda', 'jump rope']],
+  ['aer_escalador', 'Escalador', 'aerobico', ['escalera', 'stairmaster']],
+  ['aer_hiit', 'Intervalos (HIIT)', 'aerobico', ['hiit', 'intervalos']],
+];
+
+export const SEED_EXERCISES: Exercise[] = [
+  ...ROWS.map(([id, name, category, muscle, secondary, type, aliases]): Exercise => ({
+    id, name, category, muscle, secondary, type, aliases,
+  })),
+  ...TIMED.map(([id, name, group, aliases]): Exercise => ({
+    id, name, group, aliases, category: 'accesorio', muscle: 'core', secondary: [], type: 'aislamiento',
+  })),
+];
 
 export const defaultIncrement = (e: Pick<Exercise, 'type'>) => (e.type === 'compuesto' ? 2.5 : 1);
 export const defaultBlock = (e: Pick<Exercise, 'type'>) => (e.type === 'compuesto' ? 'Compuestos' : 'Accesorios');

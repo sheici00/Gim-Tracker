@@ -1,6 +1,7 @@
 import { importRoutines } from '../domain/importer';
 import { TEMPLATES } from '../domain/templates';
 import { getGoal } from '../domain/goals';
+import { allGroups, daySummary } from '../domain/groups';
 import { IS_ARTIFACT } from '../ai';
 import { useDevice } from '../device';
 import { addRoutines, getState, startSession, useStore } from '../store';
@@ -21,6 +22,8 @@ export function Home({ go }: { go: Go }) {
   const last = [...s.sessions].reverse().find((x) => x.routineId === routine?.id);
   const lastIdx = routine?.days.findIndex((d) => d.id === last?.dayId) ?? -1;
   const nextId = routine?.days[(lastIdx + 1) % (routine.days.length || 1)]?.id;
+  const groups = allGroups(s);
+  const exById = new Map(s.exercises.map((e) => [e.id, e]));
   const start = (dayId: string) => { startSession(routine!.id, dayId); go({ n: 'workout' }); };
 
   return (
@@ -70,7 +73,7 @@ export function Home({ go }: { go: Go }) {
                 <div class="grow">
                   {d.id === nextId && !s.active && <span class="tag accent">Te toca</span>}
                   <h3 class={d.id === nextId && !s.active ? 'mt' : ''}>{d.name}</h3>
-                  <p class="muted">{d.items.length} ejercicios · {d.items.reduce((a, i) => a + i.sets, 0)} series</p>
+                  <p class="muted">{daySummary(d.items, exById, groups)}</p>
                 </div>
                 <button class={'btn ' + (d.id === nextId ? 'primary' : '')} disabled={!!s.active || !d.items.length} onClick={() => start(d.id)}>
                   Entrenar

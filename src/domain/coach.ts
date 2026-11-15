@@ -1,4 +1,5 @@
 import { getGoal } from './goals';
+import { allGroups, groupOf, strengthOnly } from './groups';
 import type { AppState, Exercise, Muscle, Routine, Session } from './types';
 import { CATEGORY_LABEL, MUSCLE_LABEL, MUSCLES } from './types';
 import { categorySets, e1rm, exMap, muscleFrequency, weeklySets } from './volume';
@@ -22,12 +23,15 @@ export function picksFor(muscle: Muscle, exercises: Exercise[], routine: Routine
  * la rutina con la meta elegida y con el historial de sesiones.
  */
 export function audit(state: AppState): Finding[] {
-  const routine = state.routines.find((r) => r.id === state.activeRoutineId);
-  if (!routine || !routine.days.length)
+  const full = state.routines.find((r) => r.id === state.activeRoutineId);
+  if (!full || !full.days.length)
     return [{ severity: 'info', title: 'Sin rutina activa', detail: 'Elegí o importá una rutina para poder auditarla.', action: 'Andá a Rutinas y marcá una como activa.' }];
 
   const goal = getGoal(state.goal);
   const ex = exMap(state.exercises);
+  const groups = allGroups(state);
+  // El balance y el volumen muscular se calculan solo con lo que se mide con peso.
+  const routine = strengthOnly(full, ex, groups);
   const out: Finding[] = [];
   const cat = categorySets(routine, ex);
   const vol = weeklySets(routine, ex);
@@ -86,6 +90,17 @@ export function audit(state: AppState): Finding[] {
     const s = d.items.reduce((a, i) => a + i.sets, 0);
     if (s > 26) out.push({ severity: 'info', title: `"${d.name}" es una sesión muy larga`, detail: `${s} series en un día. Las últimas series suelen ser de baja calidad.`, action: 'Pasá 1-2 ejercicios a otro día.' });
   }
+
+  /* --- Movilidad y aeróbico --- */
+  const inGroup = (id: string) => full.days.flatMap((d) => d.items).filter((i) => groupOf(ex.get(i.exerciseId), groups).id === id);
+  if (!inGroup('movilidad').length)
+    out.push({ severity: 'info', title: 'Sin movilidad articular', detail: 'La rutina no incluye trabajo de movilidad.', action: 'Sumá 5-10 minutos de movilidad de cadera, columna torácica y hombros antes de entrenar.' });
+  const aerobic = inGroup('aerobico');
+  const minutes = aerobic.reduce((a, i) => a + i.sets * ((i.repMin + i.repMax) / 2) * (i.unit === 'seg' ? 1 / 60 : 1), 0);
+  if (!aerobic.length)
+    out.push({ severity: 'info', title: 'Sin trabajo aeróbico', detail: 'La rutina no incluye actividad aeróbica.', action: 'Para la salud cardiovascular se recomiendan 150 minutos semanales de intensidad moderada; podés sumarlos al final de la sesión o en días aparte.' });
+  else if (minutes < 75)
+    out.push({ severity: 'info', title: 'Poco volumen aeróbico', detail: `${Math.round(minutes)} minutos semanales planificados.`, action: 'La referencia general es de 150 minutos semanales de intensidad moderada, o 75 de intensidad alta.' });
 
   out.push(...auditHistory(state.sessions.filter((s) => s.routineId === routine.id), routine, ex));
 
@@ -152,14 +167,19 @@ export function buildSummary(state: AppState): string {
   if (!routine) return 'El usuario todavía no tiene una rutina activa.';
   const ex = exMap(state.exercises);
   const goal = getGoal(state.goal);
-  const cat = categorySets(routine, ex);
-  const vol = weeklySets(routine, ex);
+  const groups = allGroups(state);
+  const strength = strengthOnly(routine, ex, groups);
+  const cat = categorySets(strength, ex);
+  const vol = weeklySets(strength, ex);
   const lines = [`Meta: ${goal.name}.`, '', `RUTINA: ${routine.name}`];
   for (const d of routine.days) {
     lines.push(`\n${d.name}`);
     for (const i of d.items) {
       const e = ex.get(i.exerciseId);
-      lines.push(`- ${e?.name} (${e?.type}, ${e?.muscle}): ${i.sets}x${i.repMin}-${i.repMax}${i.unit === 'seg' ? ' seg' : ''} @ ${i.setWeights?.join('/') ?? i.weight} kg` +
+      const g = groupOf(e, groups);
+      lines.push((g.measure === 'peso'
+        ? `- ${e?.name} (${e?.type}, ${e?.muscle}): ${i.sets}x${i.repMin}-${i.repMax}${i.unit === 'seg' ? ' seg' : ''} @ ${i.setWeights?.join('/') ?? i.weight} kg`
+        : `- ${e?.name} [${g.name}]: ${i.sets}x${i.repMin}-${i.repMax} ${i.unit ?? g.measure}`) +
         (i.targetRpe ? `, RPE ${i.targetRpe}` : '') + (i.restSec ? `, descanso ${i.restSec}s` : '') + (i.notes ? `, nota: ${i.notes}` : ''));
     }
   }
