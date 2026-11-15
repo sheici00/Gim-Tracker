@@ -1,4 +1,5 @@
 import { useState } from 'preact/hooks';
+import { ask } from '../dialog';
 import { applySuggestions, update, useStore } from '../store';
 import { Header, kg, type Go } from '../ui';
 
@@ -16,8 +17,8 @@ export function SessionDetail({ id, go }: { id: string; go: Go }) {
   const volume = ses.entries.reduce((a, e) => a + e.sets.filter((x) => x.done).reduce((b, x) => b + x.weight * x.reps, 0), 0);
   const mins = Math.max(1, Math.round(((ses.finishedAt ?? ses.startedAt) - ses.startedAt) / 60000));
   const routineExists = s.routines.some((r) => r.id === ses.routineId);
-  const del = () => {
-    if (confirm('¿Eliminar esta sesión del historial?')) { update((d) => { d.sessions = d.sessions.filter((x) => x.id !== id); }); go({ n: 'history' }); }
+  const del = async () => {
+    if (await ask('¿Eliminar esta sesión del historial?')) { update((d) => { d.sessions = d.sessions.filter((x) => x.id !== id); }); go({ n: 'history' }); }
   };
 
   return (

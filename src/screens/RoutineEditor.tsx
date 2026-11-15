@@ -4,6 +4,7 @@ import { exportRoutine } from '../domain/importer';
 import { getGoal } from '../domain/goals';
 import type { Category, Exercise, ExType, Muscle, Routine, RoutineItem } from '../domain/types';
 import { CATEGORY_LABEL, MUSCLE_LABEL, MUSCLES, uid } from '../domain/types';
+import { ask } from '../dialog';
 import { getState, update, useStore } from '../store';
 import { Header, Num, parseNum, saveTextFile, type Go } from '../ui';
 
@@ -27,8 +28,8 @@ export function RoutineEditor({ id, go }: { id: string; go: Go }) {
 
   const ex = new Map(s.exercises.map((e) => [e.id, e]));
   const edit = (fn: (r: Routine) => void) => update((d) => { const r = d.routines.find((x) => x.id === id); if (r) fn(r); });
-  const remove = () => {
-    if (!confirm(`¿Eliminar "${routine.name}"? El historial de sesiones se conserva.`)) return;
+  const remove = async () => {
+    if (!(await ask(`¿Eliminar "${routine.name}"? El historial de sesiones se conserva.`))) return;
     update((d) => {
       d.routines = d.routines.filter((r) => r.id !== id);
       if (d.activeRoutineId === id) d.activeRoutineId = d.routines[0]?.id ?? null;
@@ -52,7 +53,7 @@ export function RoutineEditor({ id, go }: { id: string; go: Go }) {
           <div class="card">
             <div class="row">
               <input class="grow" aria-label="Nombre del día" value={day.name} onChange={(e) => edit((r) => { r.days[di].name = e.currentTarget.value || `Día ${di + 1}`; })} />
-              <button class="btn sm danger" onClick={() => confirm(`¿Eliminar "${day.name}"?`) && edit((r) => { r.days.splice(di, 1); })}>Quitar</button>
+              <button class="btn sm danger" onClick={async () => (await ask(`¿Eliminar "${day.name}"?`)) && edit((r) => { r.days.splice(di, 1); })}>Quitar</button>
             </div>
             <div class="mt">
               {day.items.map((it, ii) => {

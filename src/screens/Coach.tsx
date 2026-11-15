@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
-import type { ChatMessage } from '../claude';
-import { useDevice } from '../device';
+import { IS_ARTIFACT, loadAi, useAiReady, type ChatMessage } from '../ai';
 import { audit, buildSystemPrompt } from '../domain/coach';
 import { getGoal } from '../domain/goals';
 import { CATEGORY_LABEL, type Category } from '../domain/types';
@@ -20,7 +19,7 @@ let history: ChatMessage[] = [];
 
 export function Coach({ go }: { go: Go }) {
   const s = useStore();
-  const dev = useDevice();
+  const aiReady = useAiReady();
   const [messages, setMessages] = useState<ChatMessage[]>(history);
   const [draft, setDraft] = useState('');
   const [partial, setPartial] = useState<string | null>(null);
@@ -42,13 +41,11 @@ export function Coach({ go }: { go: Go }) {
     abort.current = new AbortController();
     let acc = '';
     try {
-      const { chat } = await import('../claude');
-      const full = await chat(buildSystemPrompt(getState()), next, (d) => { acc += d; setPartial(acc); end.current?.scrollIntoView({ block: 'end' }); }, abort.current.signal);
+      const full = await (await loadAi()).chat(buildSystemPrompt(getState()), next, (d) => { acc += d; setPartial(acc); end.current?.scrollIntoView({ block: 'end' }); }, abort.current.signal);
       setMessages([...next, { role: 'assistant', content: full }]);
     } catch (e) {
-      const { errorMessage } = await import('../claude');
       if (acc) setMessages([...next, { role: 'assistant', content: acc }]);
-      if (!abort.current?.signal.aborted) setError(errorMessage(e));
+      if (!abort.current?.signal.aborted) setError((await loadAi()).errorMessage(e));
     } finally { setPartial(null); }
   };
 
@@ -58,10 +55,18 @@ export function Coach({ go }: { go: Go }) {
       {routine && <p class="muted">Auditoría de "{routine.name}" para la meta {getGoal(s.goal).name.toLowerCase()}.</p>}
 
       <div class="section">Asistente Claude</div>
-      {!dev.apiKey ? (
+      {aiReady === null ? (
+        <div class="card"><p class="muted">Conectando con Claude…</p></div>
+      ) : !aiReady ? (
         <div class="card">
-          <p class="muted">Conectá tu cuenta de Claude para charlar con un coach que conoce tu rutina, tu meta y tu historial.</p>
-          <button class="btn sm block primary mt" onClick={() => go({ n: 'settings' })}>Conectar Claude</button>
+          {IS_ARTIFACT ? (
+            <p class="muted">Claude no está disponible en esta vista. Abrí la página con tu sesión de Claude iniciada para charlar con el coach.</p>
+          ) : (
+            <>
+              <p class="muted">Conectá tu cuenta de Claude para charlar con un coach que conoce tu rutina, tu meta y tu historial.</p>
+              <button class="btn sm block primary mt" onClick={() => go({ n: 'settings' })}>Conectar Claude</button>
+            </>
+          )}
         </div>
       ) : (
         <div class="card">

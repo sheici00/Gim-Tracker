@@ -105,6 +105,22 @@ Por eso el lanzamiento para iPhone es la versión web instalable:
 
 La versión anterior en Streamlit quedó en `legacy-streamlit/`.
 
+## Versión artefacto de Claude (sin clave ni servidor)
+
+La misma app se puede publicar como artefacto en claude.ai (`npm run build:artifact` genera
+`dist-artifact/page.html` y sus scripts). En esa variante:
+
+- **Claude:** el coach y el importador usan la cuenta de Claude de quien abre la página. No hay
+  clave de API; la primera vez Claude pide permiso.
+- **Datos:** se guardan en el espacio privado de cada persona dentro del artefacto, así que
+  aparecen en cualquier dispositivo donde abra la página con su cuenta. No hace falta servidor.
+- **Límites:** necesita conexión y sesión iniciada en Claude; no lee PDF (sí fotos, capturas,
+  texto, CSV, Excel y JSON); quien la reciba compartida necesita acceso de Colaborador para
+  que se guarden sus datos.
+
+El código de esta variante está en `src/ai-artifact.ts` y `src/sync-artifact.ts`; la web y la APK
+usan `src/claude.ts` y `src/sync.ts`.
+
 ## Cuenta y sincronización
 
 En **Hoy → Cuenta ⚙** creá un usuario y contraseña. Iniciando sesión con el mismo usuario en

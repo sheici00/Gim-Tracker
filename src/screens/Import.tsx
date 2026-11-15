@@ -1,6 +1,5 @@
 import { useState } from 'preact/hooks';
-import type { Attachment } from '../claude';
-import { useDevice } from '../device';
+import { IS_ARTIFACT, loadAi, useAiReady, type Attachment } from '../ai';
 import { importRoutines, importSheets, type ImportResult } from '../domain/importer';
 import { addRoutines, getState, useStore } from '../store';
 import { Header, type Go } from '../ui';
@@ -36,7 +35,7 @@ Lunes;Remo con barra;4;8-10;70;90;
 Jueves;Sentadilla;5;5;100;180;`;
 
 /** Achica la foto y la pasa a JPEG: las fotos del celular superan el máximo que acepta la API. */
-async function imageToBase64(file: File): Promise<string> {
+async function prepareImage(file: File): Promise<{ blob: Blob; base64: string }> {
   const url = URL.createObjectURL(file);
   try {
     const img = new Image();
@@ -47,11 +46,12 @@ async function imageToBase64(file: File): Promise<string> {
     canvas.width = Math.round(img.naturalWidth * scale);
     canvas.height = Math.round(img.naturalHeight * scale);
     canvas.getContext('2d')!.drawImage(img, 0, 0, canvas.width, canvas.height);
-    return canvas.toDataURL('image/jpeg', 0.85).split(',')[1];
+    const blob = await new Promise<Blob>((res, rej) => canvas.toBlob((b) => (b ? res(b) : rej(new Error('No se pudo leer la imagen.'))), 'image/jpeg', 0.85));
+    return { blob, base64: await fileToBase64(blob) };
   } finally { URL.revokeObjectURL(url); }
 }
 
-const fileToBase64 = (file: File) => new Promise<string>((resolve, reject) => {
+const fileToBase64 = (file: Blob) => new Promise<string>((resolve, reject) => {
   const r = new FileReader();
   r.onload = () => resolve(String(r.result).split(',')[1]);
   r.onerror = () => reject(r.error);
@@ -60,7 +60,7 @@ const fileToBase64 = (file: File) => new Promise<string>((resolve, reject) => {
 
 export function ImportScreen({ go }: { go: Go }) {
   const s = useStore();
-  const dev = useDevice();
+  const hasAi = !!useAiReady();
   const [text, setText] = useState('');
   const [file, setFile] = useState<{ name: string; att: Attachment } | null>(null);
   const [res, setRes] = useState<ImportResult | null>(null);
@@ -85,10 +85,11 @@ export function ImportScreen({ go }: { go: Go }) {
         const out = importSheets(sheets, f.name.replace(/\.xlsx$/i, ''), getState().exercises);
         // Si la planilla no tiene una estructura reconocible, queda el texto para pasárselo a Claude.
         if (out.routines.length) setRes(out);
-        else setError('No reconocí la estructura de la planilla.' + (dev.apiKey ? ' Probá con "Interpretar con Claude".' : ' Conectá Claude en Ajustes para interpretarla.'));
+        else setError('No reconocí la estructura de la planilla.' + (hasAi ? ' Probá con "Interpretar con Claude".' : ''));
       } else if (f.type.startsWith('image/') || /^(heic|heif)$/.test(ext)) {
-        setFile({ name: f.name, att: { kind: 'image', mediaType: 'image/jpeg', base64: await imageToBase64(f) } });
+        setFile({ name: f.name, att: { kind: 'image', ...(await prepareImage(f)) } });
       } else if (f.type === 'application/pdf' || ext === 'pdf') {
+        if (IS_ARTIFACT) throw new Error('En esta versión no se pueden leer PDF. Sacale una captura o pegá el texto.');
         if (f.size > 20 * 1024 * 1024) throw new Error('El PDF supera los 20 MB.');
         setFile({ name: f.name, att: { kind: 'pdf', base64: await fileToBase64(f) } });
       } else if (/^(json|txt|csv|tsv|md)$/.test(ext) || f.type.startsWith('text/')) {
@@ -102,14 +103,12 @@ export function ImportScreen({ go }: { go: Go }) {
   const withClaude = async () => {
     reset(); setBusy(true);
     try {
-      const { extractRoutine } = await import('../claude');
-      const json = await extractRoutine(file ? [file.att] : [{ kind: 'text', text }]);
+      const json = await (await loadAi()).extractRoutine(file ? [file.att] : [{ kind: 'text', text }]);
       const out = importRoutines(json, getState().exercises);
       if (!out.routines.length) throw new Error('Claude no encontró una rutina en ese contenido.');
       setRes(out);
     } catch (err) {
-      const { errorMessage } = await import('../claude');
-      setError(errorMessage(err));
+      setError((await loadAi()).errorMessage(err));
     } finally { setBusy(false); }
   };
 
@@ -125,11 +124,11 @@ export function ImportScreen({ go }: { go: Go }) {
       <Header title="Importar rutina" back={() => go({ n: 'routines' })} />
       <p class="muted">
         Cargá tu rutina en el formato que la tengas y la app la pasa a un formato único y editable.
-        Texto, JSON, CSV y Excel se leen en el dispositivo; fotos, capturas, PDF y formatos libres los interpreta Claude.
+        Texto, JSON, CSV y Excel se leen en el dispositivo; fotos, capturas{IS_ARTIFACT ? '' : ', PDF'} y formatos libres los interpreta Claude.
       </p>
 
       <label class="btn block mt">Elegir archivo o foto
-        <input type="file" accept=".json,.txt,.csv,.tsv,.md,.xlsx,.pdf,image/*" hidden onChange={onFile} />
+        <input type="file" accept={IS_ARTIFACT ? '.json,.txt,.csv,.tsv,.md,.xlsx,image/*' : '.json,.txt,.csv,.tsv,.md,.xlsx,.pdf,image/*'} hidden onChange={onFile} />
       </label>
       {file ? (
         <div class="card mt row between">
@@ -151,13 +150,13 @@ export function ImportScreen({ go }: { go: Go }) {
         {!needsClaude && (
           <button class="btn grow primary" disabled={!text.trim() || busy} onClick={() => { reset(); setRes(importRoutines(text, getState().exercises)); }}>Analizar</button>
         )}
-        {dev.apiKey && (
+        {hasAi && (
           <button class={'btn grow ' + (needsClaude ? 'primary' : '')} disabled={busy || (!file && !text.trim())} onClick={() => void withClaude()}>
             {busy ? 'Claude está leyendo…' : 'Interpretar con Claude'}
           </button>
         )}
       </div>
-      {!dev.apiKey && (
+      {!hasAi && !IS_ARTIFACT && (
         <p class="hint">
           {needsClaude ? 'Las fotos y los PDF necesitan Claude. ' : 'Para fotos, PDF o formatos poco comunes, '}
           <button class="link" onClick={() => go({ n: 'settings' })}>conectá Claude en Ajustes</button>.

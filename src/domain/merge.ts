@@ -44,12 +44,15 @@ export function mergeDocs(a: SyncDoc, b: SyncDoc): SyncDoc {
   };
 }
 
-/** Comparación estructural independiente del orden de las claves. */
-export function sameDoc(a: unknown, b: unknown): boolean {
-  const canon = (v: unknown): unknown =>
-    Array.isArray(v) ? v.map(canon)
+/** JSON canónico: mismas claves en el mismo orden y sin valores undefined. */
+export function canon(value: unknown): string {
+  const norm = (v: unknown): unknown =>
+    Array.isArray(v) ? v.map(norm)
       : v && typeof v === 'object'
-        ? Object.fromEntries(Object.entries(v as object).filter(([, x]) => x !== undefined).sort(([x], [y]) => x.localeCompare(y)).map(([k, x]) => [k, canon(x)]))
+        ? Object.fromEntries(Object.entries(v as object).filter(([, x]) => x !== undefined).sort(([x], [y]) => x.localeCompare(y)).map(([k, x]) => [k, norm(x)]))
         : v;
-  return JSON.stringify(canon(a)) === JSON.stringify(canon(b));
+  return JSON.stringify(norm(value));
 }
+
+/** Comparación estructural independiente del orden de las claves. */
+export const sameDoc = (a: unknown, b: unknown) => canon(a) === canon(b);

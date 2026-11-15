@@ -10,7 +10,8 @@
     "start": "npm run build && node server/index.mjs",
     "test": "vitest run",
     "server": "node server/index.mjs",
-    "android": "npm run build && cap sync android"
+    "android": "npm run build && cap sync android",
+    "build:artifact": "tsc --noEmit && vite build --mode artifact --outDir dist-artifact && node scripts/make-artifact.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.8.0",

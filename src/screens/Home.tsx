@@ -1,6 +1,7 @@
 import { importRoutines } from '../domain/importer';
 import { TEMPLATES } from '../domain/templates';
 import { getGoal } from '../domain/goals';
+import { IS_ARTIFACT } from '../ai';
 import { useDevice } from '../device';
 import { addRoutines, getState, startSession, useStore } from '../store';
 import { useSyncStatus } from '../sync';
@@ -26,7 +27,7 @@ export function Home({ go }: { go: Go }) {
     <>
       <Header title="Hoy" right={
         <button class="btn sm" onClick={() => go({ n: 'settings' })} aria-label="Ajustes y cuenta">
-          {dev.token && <span class={'dot ' + sync.state} />}{dev.token ? dev.username : 'Cuenta'} ⚙
+          {(IS_ARTIFACT || dev.token) && <span class={'dot ' + sync.state} />}{IS_ARTIFACT ? 'Ajustes' : dev.token ? dev.username : 'Cuenta'} ⚙
         </button>} />
       {s.active && (
         <div class="card">

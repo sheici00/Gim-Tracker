@@ -7,7 +7,7 @@ export type SyncStatus = { state: 'off' | 'idle' | 'syncing' | 'offline' | 'erro
 
 let status: SyncStatus = { state: getDevice().token ? 'idle' : 'off' };
 const subs = new Set<() => void>();
-const setStatus = (s: SyncStatus) => { status = s; subs.forEach((f) => f()); };
+export const setStatus = (s: SyncStatus) => { status = s; subs.forEach((f) => f()); };
 
 export function useSyncStatus(): SyncStatus {
   const [, tick] = useState(0);

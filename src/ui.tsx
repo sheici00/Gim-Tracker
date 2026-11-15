@@ -1,5 +1,6 @@
 import type { ComponentChildren } from 'preact';
 import { isNative } from './device';
+import { notify } from './dialog';
 
 export type View =
   | { n: 'home' } | { n: 'routines' } | { n: 'routine'; id: string } | { n: 'import' }
@@ -59,13 +60,20 @@ export function Scale({ value, onChange, min = 1, max = 10 }: { value: number; o
   );
 }
 
-/** Descarga un archivo de texto. Dentro de la APK no hay descargas, así que se copia al portapapeles. */
+/** Guarda un archivo de texto con el mecanismo que tenga cada plataforma. */
 export async function saveTextFile(name: string, text: string) {
-  if (isNative()) {
-    try { await navigator.clipboard.writeText(text); alert('Copiado al portapapeles. Pegalo en una nota o un mail para guardarlo.'); }
-    catch { alert('No se pudo copiar. Abrí la app desde el navegador para descargar el archivo.'); }
+  const copy = async (why: string) => {
+    try { await navigator.clipboard.writeText(text); await notify(why + ' Se copió al portapapeles: pegalo en una nota o un mail para guardarlo.'); }
+    catch { await notify('No se pudo guardar ni copiar el archivo.'); }
+  };
+  if (import.meta.env.VITE_TARGET === 'artifact') {
+    const downloads = await (window.claude?.use('downloads') ?? null);
+    if (!downloads) return copy('Acá no se pueden descargar archivos.');
+    try { await downloads.save({ filename: name, data: text }); }
+    catch (e) { if ((e as { code?: string })?.code !== 'declined') await copy('No se pudo descargar.'); }
     return;
   }
+  if (isNative()) return copy('La app instalada no descarga archivos.');
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
   a.download = name;

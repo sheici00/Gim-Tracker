@@ -1,9 +1,12 @@
 import { useState } from 'preact/hooks';
+import { IS_ARTIFACT, loadAi, useAiReady } from '../ai';
 import { isNative, MODELS, setDevice, useDevice } from '../device';
+import { ask, notify } from '../dialog';
 import { exportBackup, restoreBackup } from '../store';
 import { signIn, signOut, syncNow, useSyncStatus } from '../sync';
 import { Header, saveTextFile, type Go } from '../ui';
 
+const ARTIFACT_STATUS = { off: 'Solo en este dispositivo', idle: 'Guardado', syncing: 'Cargando…', offline: 'Sin conexión', error: 'Error' };
 const STATUS = { off: 'Sin iniciar sesión', idle: 'Sincronizado', syncing: 'Sincronizando…', offline: 'Sin conexión: se sincroniza al volver', error: 'Error' };
 
 export function Settings({ go }: { go: Go }) {
@@ -15,6 +18,7 @@ export function Settings({ go }: { go: Go }) {
   const [working, setWorking] = useState(false);
   const [key, setKey] = useState(dev.apiKey);
   const [test, setTest] = useState<{ ok: boolean; text: string } | null>(null);
+  const aiReady = useAiReady();
 
   const auth = async (mode: 'login' | 'register') => {
     setAuthErr(''); setWorking(true);
@@ -26,17 +30,18 @@ export function Settings({ go }: { go: Go }) {
     setDevice({ apiKey: key.trim() });
     if (!key.trim()) { setTest(null); return; }
     setTest({ ok: true, text: 'Probando…' });
-    const { testKey, errorMessage } = await import('../claude');
+    const { testKey } = await import('../claude');
     try { await testKey(); setTest({ ok: true, text: '✓ Conectado con Claude.' }); }
-    catch (e) { setTest({ ok: false, text: errorMessage(e) }); }
+    catch (e) { setTest({ ok: false, text: (await loadAi()).errorMessage(e) }); }
   };
   const download = () => void saveTextFile(`gym-tracker-${new Date().toISOString().slice(0, 10)}.json`, exportBackup());
   const restore = async (e: Event) => {
     const input = e.currentTarget as HTMLInputElement;
     const f = input.files?.[0];
     if (!f) return;
-    if (confirm('Esto reemplaza todos los datos actuales por los del archivo. ¿Continuar?'))
-      alert(restoreBackup(await f.text()) ? 'Datos restaurados.' : 'El archivo no es una copia válida de Gym Tracker.');
+    const text = await f.text();
+    if (await ask('Esto reemplaza todos los datos actuales por los del archivo. ¿Continuar?'))
+      await notify(restoreBackup(text) ? 'Datos restaurados.' : 'El archivo no es una copia válida de Gym Tracker.');
     input.value = '';
   };
 
@@ -44,6 +49,29 @@ export function Settings({ go }: { go: Go }) {
     <>
       <Header title="Ajustes" back={() => go({ n: 'home' })} />
 
+      {IS_ARTIFACT ? (
+        <>
+          <div class="section">Tus datos</div>
+          <div class="card">
+            <div class="row between"><h3>Cuenta de Claude</h3><span class={'tag ' + (sync.state === 'idle' ? 'accent' : '')}>{ARTIFACT_STATUS[sync.state]}</span></div>
+            <p class="muted mt">
+              {sync.state === 'off'
+                ? 'Ahora mismo tus datos se guardan solo en este dispositivo.'
+                : 'Tus rutinas e historial se guardan en tu cuenta de Claude, en un espacio privado que solo vos ves. Aparecen en cualquier dispositivo donde abras esta página con la misma cuenta.'}
+            </p>
+            {sync.error && <p class="err">{sync.error}</p>}
+          </div>
+          <div class="section">Claude</div>
+          <div class="card">
+            <p class="muted">
+              {aiReady === null ? 'Conectando con Claude…'
+                : aiReady ? 'El coach y el importador usan tu cuenta de Claude: no hace falta ninguna clave. La primera vez, Claude te pide permiso.'
+                  : 'Claude no está disponible en esta vista. Abrí la página con tu sesión de Claude iniciada.'}
+            </p>
+          </div>
+        </>
+      ) : (
+        <>
       <div class="section">Cuenta y sincronización</div>
       <div class="card">
         {dev.token ? (
@@ -56,7 +84,7 @@ export function Settings({ go }: { go: Go }) {
             {sync.error && <p class="err">{sync.error}</p>}
             <div class="row mt">
               <button class="btn sm grow" disabled={sync.state === 'syncing'} onClick={() => void syncNow()}>Sincronizar ahora</button>
-              <button class="btn sm grow danger" onClick={() => confirm('¿Cerrar sesión en este dispositivo? Los datos quedan guardados acá y en tu cuenta.') && void signOut()}>Cerrar sesión</button>
+              <button class="btn sm grow danger" onClick={async () => (await ask('¿Cerrar sesión en este dispositivo? Los datos quedan guardados acá y en tu cuenta.')) && void signOut()}>Cerrar sesión</button>
             </div>
           </>
         ) : (
@@ -102,6 +130,9 @@ export function Settings({ go }: { go: Go }) {
           {dev.apiKey && <button class="btn sm grow danger" onClick={() => { setKey(''); setDevice({ apiKey: '' }); setTest(null); }}>Quitar clave</button>}
         </div>
       </div>
+
+        </>
+      )}
 
       <div class="section">Copia de seguridad</div>
       <div class="card">

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'preact/hooks';
 import { getGoal } from '../domain/goals';
 import type { SessionEntry } from '../domain/types';
+import { ask } from '../dialog';
 import { update, useStore } from '../store';
 import { Header, Stepper, type Go } from '../ui';
 
@@ -34,8 +35,8 @@ export function Workout({ go }: { go: Go }) {
       setRestEnd(Date.now() + (a.entries[ei].restSec ?? goal.rest[type === 'compuesto' ? 0 : 1]) * 1000);
     }
   };
-  const cancel = () => {
-    if (confirm('¿Descartar este entrenamiento? Se pierde lo registrado.')) { update((d) => { d.active = null; }); go({ n: 'home' }); }
+  const cancel = async () => {
+    if (await ask('¿Descartar este entrenamiento? Se pierde lo registrado.')) { update((d) => { d.active = null; }); go({ n: 'home' }); }
   };
 
   return (

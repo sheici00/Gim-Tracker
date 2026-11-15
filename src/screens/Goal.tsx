@@ -3,6 +3,7 @@ import { picksFor } from '../domain/coach';
 import { getGoal, GOALS } from '../domain/goals';
 import { MUSCLE_LABEL, MUSCLES } from '../domain/types';
 import { exMap, weeklySets } from '../domain/volume';
+import { ask } from '../dialog';
 import { update, useStore } from '../store';
 import { Header } from '../ui';
 import { addExerciseToDay } from './RoutineEditor';
@@ -17,8 +18,8 @@ export function GoalScreen() {
   const day = routine?.days.find((d) => d.id === dayId) ?? routine?.days[0];
   const SCALE = 26;
 
-  const applyReps = () => {
-    if (!routine || !confirm(`¿Ajustar los rangos de repeticiones de "${routine.name}" a esta meta?`)) return;
+  const applyReps = async () => {
+    if (!routine || !(await ask(`¿Ajustar los rangos de repeticiones de "${routine.name}" a esta meta?`))) return;
     update((d) => {
       for (const dd of d.routines.find((r) => r.id === routine.id)!.days)
         for (const it of dd.items) {

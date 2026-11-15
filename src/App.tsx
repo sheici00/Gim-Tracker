@@ -1,4 +1,5 @@
 import { useState } from 'preact/hooks';
+import { DialogHost } from './dialog';
 import { Coach } from './screens/Coach';
 import { GoalScreen } from './screens/Goal';
 import { History, SessionDetail } from './screens/History';
@@ -39,6 +40,7 @@ export function App() {
         {view.n === 'settings' && <Settings go={go} />}
         {view.n === 'history' && <History go={go} />}
       </main>
+      <DialogHost />
       {!fullscreen && (
         <nav class="tabs">
           {TABS.map((t) => (
